@@ -416,12 +416,66 @@ def main():
     else:
         st.info("👆 Please upload and process a document first to start asking questions")
 
-    # Footer
+    # Footer with branding and contact
     st.markdown("---")
-    st.markdown(
-        '<div class="tech-stack">Built with LangChain 🦜🔗 | Streamlit | OpenAI GPT | FAISS Vector Store</div>',
-        unsafe_allow_html=True
-    )
+
+    # Lead Capture Integration
+    with st.expander("🤝 Interested in Custom AI Solutions?"):
+        st.subheader("Let's discuss your AI needs")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            name = st.text_input("Name*", placeholder="Your full name")
+            email = st.text_input("Email*", placeholder="your@email.com")
+        with col2:
+            company = st.text_input("Company", placeholder="Your company name")
+            phone = st.text_input("Phone", placeholder="+1 (555) 123-4567")
+
+        message = st.text_area(
+            "Tell us about your project*",
+            placeholder="Describe your requirements, timeline, and any specific needs...",
+            height=100
+        )
+
+        if st.button("🚀 Send Message", type="primary"):
+            if name and email and message:
+                # Here you would integrate with your CRM/email service
+                # For demo purposes, we'll show a success message
+                st.success("✅ Thanks! We'll be in touch within 24 hours.")
+                st.balloons()
+
+                # In production, you'd send this data to your CRM:
+                # send_lead_notification(name, email, company, phone, message)
+
+                st.info("💡 **Demo Note**: In production, this would automatically notify your sales team!")
+            else:
+                st.error("❌ Please fill in all required fields (Name, Email, Message)")
+
+    # Custom Footer
+    st.markdown("""
+    <div style="text-align: center; padding: 2rem; background-color: #f8f9fa; border-radius: 10px; margin-top: 2rem; margin-bottom: 2rem;">
+        <div style="color: #1f77b4; font-size: 1.1rem; font-weight: bold; margin-bottom: 1rem;">
+            🚀 Ready to Transform Your Business with AI?
+        </div>
+        <div style="color: #666; margin-bottom: 1rem;">
+            Built with ❤️ by <strong>Nirix AI</strong> | Specializing in LangChain & Document Intelligence Solutions
+        </div>
+        <div style="margin-bottom: 1rem;">
+            <a href="mailto:ajaysharmabjki96@gmail.com" style="color: #1f77b4; text-decoration: none; margin: 0 1rem;">
+                📧 ajaysharmabjki96@gmail.com
+            </a>
+            <a href="tel:+919414256219" style="color: #1f77b4; text-decoration: none; margin: 0 1rem;">
+                📞 +91 9414256219
+            </a>
+            <a href="https://nirixai.com" target="_blank" style="color: #1f77b4; text-decoration: none; margin: 0 1rem;">
+                🌐 nirixai.com
+            </a>
+        </div>
+        <div style="font-size: 0.9rem; color: #888;">
+            <strong>Tech Stack:</strong> LangChain 🦜🔗 | Streamlit | OpenAI GPT | FAISS Vector Store
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # Demo information
     with st.expander("ℹ️ About This Demo"):
