@@ -24,3 +24,17 @@ python-docx
 # Additional utilities
 python-dotenv
 tiktoken
+
+# Web scraping and HTML parsing
+beautifulsoup4
+requests
+lxml
+
+# HTML to text conversion
+html2text
+
+# Text processing and embeddings
+sentence-transformers
+
+# HTTP utilities (enhanced requests functionality)
+urllib3
