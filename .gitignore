@@ -439,7 +439,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+document-intelligence/.env
 .venv
 env/
 venv/
