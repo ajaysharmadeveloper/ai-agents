@@ -615,14 +615,47 @@ def main():
 
     # Footer
     st.markdown("---")
+
     st.markdown("""
-    <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; color: white;">
-        <h3>🚀 Transform Your E-commerce with AI</h3>
-        <p>This demo showcases intelligent product discovery through natural language processing</p>
-        <p><strong>Built by Nirix AI</strong> | Specializing in LangChain & E-commerce AI Solutions</p>
-        <p>📧 ajaysharmabki96@gmail.com | 📞 +91 9414256219 | 🌐 nirixai.com</p>
-    </div>
-    """, unsafe_allow_html=True)
+        <div style="text-align: center; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; color: white;">
+            <h3>🚀 Transform Your E-commerce with AI</h3>
+            <p>This demo showcases intelligent product discovery through natural language processing</p>
+            <p><strong>Built by Nirix AI</strong> | Specializing in LangChain & E-commerce AI Solutions</p>
+            <p>📧 ajaysharmabki96@gmail.com | 📞 +91 9414256219 | 🌐 nirixai.com</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Footer
+    st.markdown("---")
+
+    # About This Demo section
+    with st.expander("ℹ️ About This Demo"):
+        st.markdown("""
+        **AI Product Discovery Assistant** demonstrates advanced AI capabilities for e-commerce product discovery:
+
+        **Key Features:**
+        - **Natural Language Search**: Describe what you need in plain English
+        - **Semantic Product Matching**: AI-powered vector search for relevant products  
+        - **Conversational Memory**: Maintains context throughout the shopping session
+        - **Smart Recommendations**: Suggests products based on customer requirements
+        - **Interactive Product Cards**: Beautiful product display with ratings and features
+        - **Category Filtering**: Browse products by category
+        - **Usage Tracking**: Token usage and cost monitoring
+
+        **Technical Implementation:**
+        - **LangChain**: Orchestrates the AI workflow
+        - **OpenAI GPT**: Powers conversational AI and understands user intent
+        - **FAISS**: Vector database for fast semantic similarity search
+        - **Streamlit**: Interactive web interface with real-time updates
+
+        **Business Value:**
+        - Increased conversion through better product discovery
+        - Reduced support costs with automated assistance
+        - Enhanced user experience with natural language interface
+        - Data insights from customer search patterns
+        - Personalized shopping recommendations
+        """)
+
 
 
 if __name__ == "__main__":
