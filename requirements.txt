@@ -47,3 +47,4 @@ openai-whisper
 ffmpeg-python
 torch
 torchaudio
+static-ffmpeg
