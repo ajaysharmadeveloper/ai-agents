@@ -44,7 +44,15 @@ urllib3
 # Youtube transcription
 yt-dlp
 openai-whisper
-ffmpeg-python
+
+# Optional but recommended for better performance
 torch
 torchaudio
+
+# FFmpeg alternatives for audio processing
+ffmpeg-python
 static-ffmpeg
+imageio-ffmpeg
+
+# Audio processing libraries
+pydub
