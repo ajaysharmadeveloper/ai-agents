@@ -308,6 +308,8 @@ def main():
         st.session_state.website_info = None
     if 'api_key_valid' not in st.session_state:
         st.session_state.api_key_valid = False
+    if 'selected_url' not in st.session_state:
+        st.session_state.selected_url = ""
 
     # Sidebar
     with st.sidebar:
@@ -390,6 +392,7 @@ def main():
         with col1:
             url_input = st.text_input(
                 "Website URL to analyze:",
+                value=st.session_state.selected_url,
                 placeholder="https://example.com",
                 help="Enter any publicly accessible website URL",
                 key="welcome_url_input"
@@ -399,7 +402,7 @@ def main():
             st.markdown("<br>", unsafe_allow_html=True)  # Add spacing
             analyze_button = st.button("🚀 Analyze Website", type="primary", disabled=True)
             if analyze_button:
-                st.warning("⚠️ Please enter your OpenAI API key first!")
+                st.toast("⚠️ Please enter your OpenAI API key first!", icon="⚠️")
 
         # Example URLs section
         st.header("📚 Try These Example Websites")
@@ -449,7 +452,9 @@ def main():
                         key=f"example_{i}",
                         use_container_width=True
                 ):
-                    st.session_state.welcome_url_input = example['url']
+                    # Show error toast and update selected_url
+                    st.toast("⚠️ Please enter your OpenAI API key first to analyze websites!", icon="⚠️")
+                    st.session_state.selected_url = example['url']
                     st.rerun()
                 st.caption(example['description'])
 
@@ -481,11 +486,7 @@ def render_main_app_content():
         st.header("🔗 Website URL")
 
         # Check if URL was set from welcome screen or auto-processing
-        default_url = ""
-        if 'welcome_url_input' in st.session_state and st.session_state.welcome_url_input:
-            default_url = st.session_state.welcome_url_input
-        elif 'selected_example_url' in st.session_state and st.session_state.selected_example_url:
-            default_url = st.session_state.selected_example_url
+        default_url = st.session_state.selected_url
 
         url_input = st.text_input(
             "Enter the website URL you want to analyze:",
@@ -516,13 +517,14 @@ def render_main_app_content():
         for key in ['processed_url', 'vectorstore', 'qa_chain', 'chat_history', 'website_info']:
             if key in st.session_state:
                 del st.session_state[key]
+        st.session_state.selected_url = ""
         st.rerun()
 
     # Handle auto-processing from quick examples
     if 'auto_process_url' in st.session_state and st.session_state.auto_process_url:
         url_input = st.session_state.auto_process_url
         # Store the selected URL for the input field
-        st.session_state.selected_example_url = url_input
+        st.session_state.selected_url = url_input
         del st.session_state.auto_process_url  # Clear the flag
 
         # Force a rerun to update the input field, then process
@@ -533,6 +535,13 @@ def render_main_app_content():
         # Auto-trigger processing
         with st.spinner("🔄 Processing website content..."):
             try:
+                # Check if API key is still valid
+                if not st.session_state.api_key_valid:
+                    st.toast("⚠️ Please enter your OpenAI API key first!", icon="⚠️")
+                    if 'processing_started' in st.session_state:
+                        del st.session_state.processing_started
+                    return
+
                 # Extract content
                 content_data = st.session_state.assistant.extract_text_from_url(url_input)
 
@@ -564,6 +573,7 @@ def render_main_app_content():
 
             except Exception as e:
                 st.error(f"❌ Error processing content: {str(e)}")
+                st.toast(f"❌ Error: {str(e)}", icon="❌")
                 # Clear the processing flag and any partial state
                 if 'processing_started' in st.session_state:
                     del st.session_state.processing_started
@@ -574,10 +584,13 @@ def render_main_app_content():
     # Process website
     if process_button and url_input:
         if not st.session_state.api_key_valid:
+            st.toast("⚠️ Please enter a valid OpenAI API key first!", icon="⚠️")
             st.error("❌ Please enter a valid OpenAI API key first")
         elif not url_input.strip():
+            st.toast("⚠️ Please enter a website URL!", icon="⚠️")
             st.error("❌ Please enter a website URL")
         elif not st.session_state.assistant.is_valid_url(url_input.strip()):
+            st.toast("⚠️ Please enter a valid URL!", icon="⚠️")
             st.error("❌ Please enter a valid URL (e.g., https://example.com)")
         else:
             # Show processing message
@@ -588,6 +601,7 @@ def render_main_app_content():
 
                     if not content_data['success']:
                         st.error(f"❌ Failed to process website: {content_data['error']}")
+                        st.toast(f"❌ Failed to process website: {content_data['error']}", icon="❌")
                     else:
                         # Process content and create vector store
                         vectorstore = st.session_state.assistant.process_content(content_data)
@@ -601,6 +615,7 @@ def render_main_app_content():
                         st.session_state.qa_chain = qa_chain
                         st.session_state.website_info = content_data
                         st.session_state.chat_history = []
+                        st.session_state.selected_url = url_input.strip()
 
                         st.markdown(f"""
                         <div class="success-box">
@@ -609,8 +624,12 @@ def render_main_app_content():
                         </div>
                         """, unsafe_allow_html=True)
 
+                        st.toast(f"✅ Website processed successfully!", icon="✅")
+
                 except Exception as e:
-                    st.error(f"❌ Error processing content: {str(e)}")
+                    error_msg = str(e)
+                    st.error(f"❌ Error processing content: {error_msg}")
+                    st.toast(f"❌ Error: {error_msg}", icon="❌")
                     # Clear any partial state
                     for key in ['vectorstore', 'qa_chain', 'website_info']:
                         if key in st.session_state:
@@ -630,10 +649,16 @@ def render_main_app_content():
         if st.button("🤔 Ask Question", key="ask_btn") and question:
             if not question.strip():
                 st.warning("⚠️ Please enter a valid question.")
+                st.toast("⚠️ Please enter a valid question!", icon="⚠️")
                 return
 
             with st.spinner("🧠 Thinking..."):
                 try:
+                    # Check if API key is still valid
+                    if not st.session_state.api_key_valid:
+                        st.toast("⚠️ Please enter your OpenAI API key first!", icon="⚠️")
+                        return
+
                     # Get answer from QA chain
                     result = st.session_state.qa_chain({"question": question.strip()})
 
@@ -655,6 +680,7 @@ def render_main_app_content():
 
                     # Display the answer immediately
                     st.success("✅ Answer generated successfully!")
+                    st.toast("✅ Answer generated!", icon="✅")
                     with st.expander("📝 Latest Answer", expanded=True):
                         st.markdown(f"**Question:** {question.strip()}")
                         st.markdown(f"**Answer:** {answer}")
@@ -667,6 +693,7 @@ def render_main_app_content():
                 except Exception as e:
                     error_msg = str(e)
                     st.error(f"❌ Error generating answer: {error_msg}")
+                    st.toast(f"❌ Error generating answer: {error_msg}", icon="❌")
 
                     # Log the error for debugging
                     st.session_state.last_error = {
@@ -784,9 +811,11 @@ def render_footer_sections():
                 # Validate required fields
                 if not name or not email or not message:
                     st.error("Please fill in all required fields (marked with *)")
+                    st.toast("⚠️ Please fill in all required fields!", icon="⚠️")
                 else:
                     # Here you would typically send the form data to your backend
                     st.success("✅ Thank you for your interest! We'll get back to you within 24 hours.")
+                    st.toast("✅ Message sent successfully!", icon="✅")
                     st.balloons()
 
                     # Store the form data (in a real app, this would go to a database or email service)
