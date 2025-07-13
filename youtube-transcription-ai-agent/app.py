@@ -140,7 +140,7 @@ class YouTubeTranscriptionApp:
                 # Add ffmpeg location if found
                 if ffmpeg_path:
                     ydl_opts['ffmpeg_location'] = ffmpeg_path
-                    st.info(f"✅ Using FFmpeg at: {ffmpeg_path}")
+                    # st.info(f"✅ Using FFmpeg at: {ffmpeg_path}")  # Removed info message
                 else:
                     st.warning("⚠️ FFmpeg not found, will try without conversion")
 
