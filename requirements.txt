@@ -57,3 +57,8 @@ imageio-ffmpeg
 
 # Audio processing libraries
 pydub
+
+gspread
+google-auth
+google-auth-oauthlib
+google-auth-httplib2

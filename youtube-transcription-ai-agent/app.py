@@ -2,8 +2,16 @@ import streamlit as st
 import os
 import tempfile
 import re
+import json
 from typing import List, Dict, Any
 import logging
+from datetime import datetime
+from dotenv import load_dotenv
+import gspread
+from google.oauth2.service_account import Credentials
+
+# Load environment variables
+load_dotenv()
 
 # Fix OpenMP issue
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -17,16 +25,190 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import Document
+from langchain_community.callbacks.manager import get_openai_callback
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+class TokenTracker:
+    """Class to track and manage token usage and costs"""
+
+    def __init__(self, file_path="token_usage.json"):
+        self.file_path = file_path
+        self.load_usage()
+
+    def load_usage(self):
+        """Load token usage from file"""
+        try:
+            if os.path.exists(self.file_path):
+                with open(self.file_path, 'r') as f:
+                    data = json.load(f)
+                    self.total_tokens = data.get('total_tokens', 0)
+                    self.total_cost = data.get('total_cost', 0.0)
+            else:
+                self.total_tokens = 0
+                self.total_cost = 0.0
+        except Exception as e:
+            logger.error(f"Error loading token usage: {e}")
+            self.total_tokens = 0
+            self.total_cost = 0.0
+
+    def save_usage(self):
+        """Save token usage to file"""
+        try:
+            data = {
+                'total_tokens': self.total_tokens,
+                'total_cost': self.total_cost,
+                'last_updated': datetime.now().isoformat()
+            }
+            with open(self.file_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving token usage: {e}")
+
+    def update_usage(self, tokens: int, cost: float):
+        """Update token usage and cost"""
+        self.total_tokens += tokens
+        self.total_cost += cost
+        self.save_usage()
+
+    def get_stats(self):
+        """Get current usage statistics"""
+        return {
+            'total_tokens': self.total_tokens,
+            'total_cost': self.total_cost
+        }
+
+
+class GoogleSheetsManager:
+    """Class to manage Google Sheets operations"""
+
+    def __init__(self):
+        self.setup_credentials()
+
+    def setup_credentials(self):
+        """Setup Google Sheets credentials"""
+        try:
+            # Check if all required environment variables are present
+            required_vars = [
+                "GOOGLE_PROJECT_ID",
+                "GOOGLE_PRIVATE_KEY_ID",
+                "GOOGLE_PRIVATE_KEY",
+                "GOOGLE_CLIENT_EMAIL",
+                "GOOGLE_CLIENT_ID",
+                "GOOGLE_SPREADSHEET_ID"
+            ]
+
+            missing_vars = []
+            for var in required_vars:
+                if not os.getenv(var):
+                    missing_vars.append(var)
+
+            if missing_vars:
+                logger.error(f"Missing Google Sheets environment variables: {missing_vars}")
+                self.gc = None
+                return
+
+            # Get credentials from environment variables
+            private_key = os.getenv("GOOGLE_PRIVATE_KEY", "").replace('\\n', '\n')
+            client_email = os.getenv("GOOGLE_CLIENT_EMAIL", "")
+
+            service_account_info = {
+                "type": "service_account",
+                "project_id": os.getenv("GOOGLE_PROJECT_ID"),
+                "private_key_id": os.getenv("GOOGLE_PRIVATE_KEY_ID"),
+                "private_key": private_key,
+                "client_email": client_email,
+                "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+                "client_x509_cert_url": f"https://www.googleapis.com/robot/v1/metadata/x509/{client_email}"
+            }
+
+            scopes = ['https://www.googleapis.com/auth/spreadsheets']
+            credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
+            self.gc = gspread.authorize(credentials)
+            self.spreadsheet_id = os.getenv("GOOGLE_SPREADSHEET_ID")
+
+            # Test the connection
+            try:
+                sheet = self.gc.open_by_key(self.spreadsheet_id)
+                logger.info("Google Sheets connection successful")
+            except Exception as test_error:
+                logger.error(f"Failed to access Google Spreadsheet: {test_error}")
+                self.gc = None
+
+        except Exception as e:
+            logger.error(f"Error setting up Google Sheets credentials: {e}")
+            self.gc = None
+
+    def save_user_data(self, name: str, email: str, mobile: str):
+        """Save user data to Google Sheets"""
+        try:
+            if not self.gc:
+                return False
+
+            sheet = self.gc.open_by_key(self.spreadsheet_id)
+
+            # Try to get or create users worksheet
+            try:
+                worksheet = sheet.worksheet("users")
+            except:
+                worksheet = sheet.add_worksheet(title="users", rows="1000", cols="20")
+                # Add headers
+                worksheet.append_row(["Timestamp", "Name", "Email", "Mobile"])
+
+            # Add user data
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            worksheet.append_row([timestamp, name, email, mobile])
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error saving user data: {e}")
+            return False
+
+    def save_feedback(self, name: str, email: str, feedback: str, rating: int):
+        """Save feedback to Google Sheets"""
+        try:
+            if not self.gc:
+                return False
+
+            sheet = self.gc.open_by_key(self.spreadsheet_id)
+
+            # Try to get or create feedback worksheet
+            try:
+                worksheet = sheet.worksheet("feedback")
+            except:
+                worksheet = sheet.add_worksheet(title="feedback", rows="1000", cols="20")
+                # Add headers
+                worksheet.append_row(["Timestamp", "Name", "Email", "Feedback", "Rating"])
+
+            # Add feedback data
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            worksheet.append_row([timestamp, name, email, feedback, rating])
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error saving feedback: {e}")
+            return False
+
+
 class YouTubeTranscriptionApp:
     def __init__(self):
         self.setup_page_config()
         self.initialize_session_state()
+        self.token_tracker = TokenTracker()
+        self.sheets_manager = GoogleSheetsManager()
+
+        # Get OpenAI API key from environment
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        if self.openai_api_key:
+            os.environ["OPENAI_API_KEY"] = self.openai_api_key
 
     def setup_page_config(self):
         """Configure Streamlit page settings"""
@@ -34,7 +216,7 @@ class YouTubeTranscriptionApp:
             page_title="YouTube AI Chatbot",
             page_icon="🎥",
             layout="wide",
-            initial_sidebar_state="expanded"
+            initial_sidebar_state="collapsed"
         )
 
     def initialize_session_state(self):
@@ -49,6 +231,70 @@ class YouTubeTranscriptionApp:
             st.session_state.qa_chain = None
         if 'vector_store' not in st.session_state:
             st.session_state.vector_store = None
+        if 'user_registered' not in st.session_state:
+            st.session_state.user_registered = False
+        if 'user_name' not in st.session_state:
+            st.session_state.user_name = ""
+        if 'user_email' not in st.session_state:
+            st.session_state.user_email = ""
+        if 'user_mobile' not in st.session_state:
+            st.session_state.user_mobile = ""
+
+    def render_user_registration_modal(self):
+        """Render user registration modal"""
+        if not st.session_state.user_registered:
+            st.markdown("# 👋 Welcome to YouTube AI Chatbot")
+            st.markdown("Please provide your details to get started:")
+
+            with st.form("user_registration"):
+                name = st.text_input("Full Name *", placeholder="Enter your full name")
+                email = st.text_input("Email Address *", placeholder="Enter your email address")
+                mobile = st.text_input("Mobile Number *", placeholder="Enter your mobile number")
+
+                submitted = st.form_submit_button("💾 Save", use_container_width=True, type="primary")
+
+                if submitted:
+                    if name and email and mobile:
+                        # Simple email validation
+                        if "@" in email and "." in email:
+                            # Save to Google Sheets
+                            try:
+                                success = self.sheets_manager.save_user_data(name, email, mobile)
+
+                                if success:
+                                    st.session_state.user_registered = True
+                                    st.session_state.user_name = name
+                                    st.session_state.user_email = email
+                                    st.session_state.user_mobile = mobile
+                                    st.success("✅ Registration successful! Welcome to the app.")
+                                    st.rerun()
+                                else:
+                                    st.error(
+                                        "❌ Failed to save user data. Please check your Google Sheets configuration.")
+
+                            except Exception as e:
+                                logger.error(f"Error saving user data: {e}")
+                                st.error(f"❌ Failed to save user data. Error: {str(e)}")
+                                st.error("Please check your .env file and Google Sheets configuration.")
+                        else:
+                            st.error("❌ Please enter a valid email address.")
+                    else:
+                        st.error("❌ Please fill in all required fields.")
+
+    def render_token_stats(self):
+        """Render token usage statistics"""
+        stats = self.token_tracker.get_stats()
+
+        col1, col2, col3 = st.columns([1, 1, 2])
+
+        with col1:
+            st.metric("Total Tokens Used", f"{stats['total_tokens']:,}")
+
+        with col2:
+            st.metric("Total Cost", f"${stats['total_cost']:.4f}")
+
+        with col3:
+            st.info(f"👋 Welcome back, {st.session_state.user_name}!")
 
     def validate_youtube_url(self, url: str) -> bool:
         """Validate if the URL is a valid YouTube URL"""
@@ -140,7 +386,6 @@ class YouTubeTranscriptionApp:
                 # Add ffmpeg location if found
                 if ffmpeg_path:
                     ydl_opts['ffmpeg_location'] = ffmpeg_path
-                    # st.info(f"✅ Using FFmpeg at: {ffmpeg_path}")  # Removed info message
                 else:
                     st.warning("⚠️ FFmpeg not found, will try without conversion")
 
@@ -206,34 +451,6 @@ class YouTubeTranscriptionApp:
         except Exception as e:
             logger.error(f"Error downloading audio (alternative): {e}")
             return None
-        """Try to find ffmpeg in various locations"""
-        import shutil
-
-        # Try to find ffmpeg in PATH
-        ffmpeg_path = shutil.which('ffmpeg')
-        if ffmpeg_path:
-            return os.path.dirname(ffmpeg_path)
-
-        # Try imageio-ffmpeg
-        try:
-            import imageio_ffmpeg
-            return imageio_ffmpeg.get_ffmpeg_exe()
-        except:
-            pass
-
-        # Common paths where ffmpeg might be installed
-        common_paths = [
-            '/usr/bin/ffmpeg',
-            '/usr/local/bin/ffmpeg',
-            '/opt/conda/bin/ffmpeg',
-            '/home/appuser/venv/bin/ffmpeg'
-        ]
-
-        for path in common_paths:
-            if os.path.exists(path):
-                return os.path.dirname(path)
-
-        return None
 
     def transcribe_audio(self, audio_path: str) -> str:
         """Transcribe audio using faster-whisper"""
@@ -267,7 +484,7 @@ class YouTubeTranscriptionApp:
                     logger.warning(f"Could not cleanup audio file: {cleanup_error}")
                     pass  # Ignore cleanup errors
 
-    def setup_qa_chain(self, openai_api_key: str, transcription: str, video_info: Dict):
+    def setup_qa_chain(self, transcription: str, video_info: Dict):
         """Set up the QA chain with vector store for the transcription"""
         try:
             # Create documents from transcription
@@ -292,7 +509,7 @@ class YouTubeTranscriptionApp:
             documents = [Document(page_content=text) for text in texts]
 
             # Create embeddings and vector store
-            embeddings = OpenAIEmbeddings(api_key=openai_api_key)
+            embeddings = OpenAIEmbeddings(api_key=self.openai_api_key)
             vector_store = FAISS.from_documents(documents, embeddings)
 
             # Create conversation memory
@@ -304,7 +521,7 @@ class YouTubeTranscriptionApp:
 
             # Create the LLM with modern ChatOpenAI
             llm = ChatOpenAI(
-                api_key=openai_api_key,
+                api_key=self.openai_api_key,
                 temperature=0.7,
                 model="gpt-3.5-turbo"
             )
@@ -324,26 +541,7 @@ class YouTubeTranscriptionApp:
             st.error(f"Failed to setup QA chain: {str(e)}")
             return None, None
 
-    def render_sidebar(self):
-        """Render the sidebar with API key input"""
-        st.sidebar.header("🔑 Configuration")
-
-        api_key = st.sidebar.text_input(
-            "OpenAI API Key",
-            type="password",
-            placeholder="Enter your OpenAI API key...",
-            help="Your API key is used locally and not stored anywhere."
-        )
-
-        if api_key:
-            os.environ["OPENAI_API_KEY"] = api_key
-            st.sidebar.success("✅ API Key configured!")
-            return api_key
-        else:
-            st.sidebar.warning("⚠️ Please enter your OpenAI API key to continue.")
-            return None
-
-    def render_video_section(self, api_key: str):
+    def render_video_section(self):
         """Render the video input and processing section"""
         st.header("🎥 YouTube Video Transcription")
 
@@ -389,7 +587,7 @@ class YouTubeTranscriptionApp:
                                 # Setup QA chain
                                 st.info("🤖 Setting up AI assistant...")
                                 qa_chain, vector_store = self.setup_qa_chain(
-                                    api_key, transcription, video_info
+                                    transcription, video_info
                                 )
 
                                 if qa_chain:
@@ -454,57 +652,133 @@ class YouTubeTranscriptionApp:
                 with st.chat_message("assistant"):
                     st.write(answer)
 
-            # Chat input
-            if prompt := st.chat_input("Ask about the video..."):
-                # Add user message to chat history
-                with st.chat_message("user"):
-                    st.write(prompt)
+            # Use regular text input with button instead of st.chat_input()
+            with st.form("chat_form", clear_on_submit=True):
+                col1, col2 = st.columns([4, 1])
 
-                # Get AI response
-                with st.chat_message("assistant"):
-                    with st.spinner("Thinking..."):
-                        try:
-                            # Use invoke instead of __call__ for modern LangChain
-                            response = st.session_state.qa_chain.invoke({
-                                "question": prompt,
-                                "chat_history": []  # Reset for each question to avoid memory issues
-                            })
-                            answer = response["answer"]
-                            st.write(answer)
+                with col1:
+                    prompt = st.text_input(
+                        "Your question:",
+                        placeholder="Ask about the video...",
+                        label_visibility="collapsed"
+                    )
 
-                            # Add to chat history
-                            st.session_state.chat_history.append((prompt, answer))
+                with col2:
+                    submitted = st.form_submit_button("Send", use_container_width=True)
 
-                        except Exception as e:
-                            error_msg = f"Error processing your question: {str(e)}"
-                            st.error(error_msg)
-                            logger.error(f"Chat error: {e}")
+                if submitted and prompt:
+                    # Add user message to chat history
+                    with st.chat_message("user"):
+                        st.write(prompt)
+
+                    # Get AI response
+                    with st.chat_message("assistant"):
+                        with st.spinner("Thinking..."):
+                            try:
+                                # Track token usage
+                                with get_openai_callback() as cb:
+                                    # Use invoke instead of __call__ for modern LangChain
+                                    response = st.session_state.qa_chain.invoke({
+                                        "question": prompt,
+                                        "chat_history": []  # Reset for each question to avoid memory issues
+                                    })
+                                    answer = response["answer"]
+                                    st.write(answer)
+
+                                    # Update token usage
+                                    self.token_tracker.update_usage(cb.total_tokens, cb.total_cost)
+
+                                # Add to chat history
+                                st.session_state.chat_history.append((prompt, answer))
+
+                                # Rerun to show the new conversation
+                                st.rerun()
+
+                            except Exception as e:
+                                error_msg = f"Error processing your question: {str(e)}"
+                                st.error(error_msg)
+                                logger.error(f"Chat error: {e}")
 
         elif st.session_state.transcription:
-            st.info("🤖 AI Assistant is ready! Please ensure your OpenAI API key is configured.")
+            st.info("🤖 AI Assistant is ready!")
         else:
             st.info("📹 Please process a video first to start chatting!")
 
+    def render_feedback_section(self):
+        """Render feedback section"""
+        st.header("📝 Feedback")
+        st.write("Help us improve! Share your experience with the app.")
+
+        with st.form("feedback_form"):
+            col1, col2 = st.columns(2)
+
+            with col1:
+                rating = st.select_slider(
+                    "Rate your experience:",
+                    options=[1, 2, 3, 4, 5],
+                    value=5,
+                    format_func=lambda x: "⭐" * x
+                )
+
+            with col2:
+                st.write("")  # Empty space for alignment
+
+            feedback_text = st.text_area(
+                "Your feedback:",
+                placeholder="Tell us what you think about the app, any issues you faced, or suggestions for improvement...",
+                height=100
+            )
+
+            feedback_submitted = st.form_submit_button("Submit Feedback", use_container_width=True)
+
+            if feedback_submitted:
+                if feedback_text.strip():
+                    if self.sheets_manager.save_feedback(
+                            st.session_state.user_name,
+                            st.session_state.user_email,
+                            feedback_text,
+                            rating
+                    ):
+                        st.success("Thank you for your feedback! 🎉")
+                    else:
+                        st.error("Failed to save feedback. Please try again.")
+                else:
+                    st.error("Please provide your feedback before submitting.")
+
     def run(self):
         """Main app runner"""
+        # Check if user is registered
+        if not st.session_state.user_registered:
+            self.render_user_registration_modal()
+            return
+
+        # Check if OpenAI API key is available
+        if not self.openai_api_key:
+            st.error("⚠️ OpenAI API key not found. Please set OPENAI_API_KEY in your .env file.")
+            return
+
+        # Main app content
         st.title("🎥 YouTube AI Chatbot")
         st.markdown("Upload a YouTube video, get its transcription, and chat with an AI about the content!")
 
-        # Render sidebar
-        api_key = self.render_sidebar()
+        # Render token usage statistics
+        self.render_token_stats()
 
-        if api_key:
-            # Render video section
-            self.render_video_section(api_key)
+        st.divider()
 
-            # Render video player if video is processed
-            if st.session_state.video_info:
-                self.render_video_player()
+        # Render video section
+        self.render_video_section()
 
-            # Render chat interface
-            self.render_chat_interface()
-        else:
-            st.warning("⚠️ Please configure your OpenAI API key in the sidebar to get started.")
+        # Render video player if video is processed
+        if st.session_state.video_info:
+            self.render_video_player()
+
+        # Render chat interface
+        self.render_chat_interface()
+
+        # Render feedback section after chat interface
+        if st.session_state.qa_chain and st.session_state.transcription:
+            self.render_feedback_section()
 
 
 if __name__ == "__main__":
