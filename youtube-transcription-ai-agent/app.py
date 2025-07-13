@@ -85,8 +85,13 @@ class YouTubeTranscriptionApp:
 
     def download_audio(self, url: str) -> str:
         """Download audio from YouTube video"""
+        import shutil
+
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
+                # Try to find ffmpeg path
+                ffmpeg_path = self.find_ffmpeg()
+
                 ydl_opts = {
                     'format': 'bestaudio/best',
                     'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
@@ -99,21 +104,103 @@ class YouTubeTranscriptionApp:
                     'no_warnings': True,
                 }
 
+                # Add ffmpeg location if found
+                if ffmpeg_path:
+                    ydl_opts['ffmpeg_location'] = ffmpeg_path
+                    st.info(f"✅ Using FFmpeg at: {ffmpeg_path}")
+                else:
+                    st.warning("⚠️ FFmpeg not found, will try without conversion")
+
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
 
                 # Find the downloaded file
                 for file in os.listdir(temp_dir):
-                    if file.endswith('.mp3'):
+                    if file.endswith(('.mp3', '.m4a', '.webm', '.mp4')):
                         audio_path = os.path.join(temp_dir, file)
-                        # Copy to a persistent location
-                        permanent_path = os.path.join(os.getcwd(), 'youtube-transcription-ai-agent/temp_audio.mp3')
-                        os.rename(audio_path, permanent_path)
+
+                        # Create a new temporary file in the working directory
+                        file_ext = file.split('.')[-1]
+                        permanent_path = tempfile.NamedTemporaryFile(
+                            suffix=f'.{file_ext}',
+                            delete=False,
+                            dir=os.getcwd()
+                        ).name
+
+                        # Copy file instead of moving (fixes cross-device link error)
+                        shutil.copy2(audio_path, permanent_path)
                         return permanent_path
 
         except Exception as e:
             logger.error(f"Error downloading audio: {e}")
+            st.error(f"Audio download failed: {str(e)}")
             return None
+
+    def download_audio_alternative(self, url: str) -> str:
+        """Download audio from YouTube video without FFmpeg conversion"""
+        import shutil
+
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                ydl_opts = {
+                    'format': 'worstaudio/worst',  # Use worst quality to avoid conversion
+                    'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extractaudio': False,  # Don't extract audio, download as-is
+                }
+
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+
+                # Find the downloaded file
+                for file in os.listdir(temp_dir):
+                    if any(file.endswith(ext) for ext in ['.webm', '.m4a', '.mp4', '.mp3']):
+                        audio_path = os.path.join(temp_dir, file)
+
+                        # Create a new temporary file in the working directory
+                        file_ext = file.split('.')[-1]
+                        permanent_path = tempfile.NamedTemporaryFile(
+                            suffix=f'.{file_ext}',
+                            delete=False,
+                            dir=os.getcwd()
+                        ).name
+
+                        # Copy file instead of moving
+                        shutil.copy2(audio_path, permanent_path)
+                        return permanent_path
+
+        except Exception as e:
+            logger.error(f"Error downloading audio (alternative): {e}")
+            return None
+        """Try to find ffmpeg in various locations"""
+        import shutil
+
+        # Try to find ffmpeg in PATH
+        ffmpeg_path = shutil.which('ffmpeg')
+        if ffmpeg_path:
+            return os.path.dirname(ffmpeg_path)
+
+        # Try imageio-ffmpeg
+        try:
+            import imageio_ffmpeg
+            return imageio_ffmpeg.get_ffmpeg_exe()
+        except:
+            pass
+
+        # Common paths where ffmpeg might be installed
+        common_paths = [
+            '/usr/bin/ffmpeg',
+            '/usr/local/bin/ffmpeg',
+            '/opt/conda/bin/ffmpeg',
+            '/home/appuser/venv/bin/ffmpeg'
+        ]
+
+        for path in common_paths:
+            if os.path.exists(path):
+                return os.path.dirname(path)
+
+        return None
 
     def transcribe_audio(self, audio_path: str) -> str:
         """Transcribe audio using Whisper"""
@@ -132,10 +219,11 @@ class YouTubeTranscriptionApp:
             return ""
         finally:
             # Clean up temporary audio file
-            if os.path.exists(audio_path):
+            if audio_path and os.path.exists(audio_path):
                 try:
                     os.remove(audio_path)
-                except:
+                except Exception as cleanup_error:
+                    logger.warning(f"Could not cleanup audio file: {cleanup_error}")
                     pass  # Ignore cleanup errors
 
     def setup_qa_chain(self, openai_api_key: str, transcription: str, video_info: Dict):
@@ -243,6 +331,11 @@ class YouTubeTranscriptionApp:
                         # Download audio
                         st.info("🎵 Downloading audio...")
                         audio_path = self.download_audio(video_url)
+
+                        # If FFmpeg fails, try alternative method
+                        if not audio_path:
+                            st.warning("⚠️ Standard download failed, trying alternative method...")
+                            audio_path = self.download_audio_alternative(video_url)
 
                         if audio_path:
                             # Transcribe audio
