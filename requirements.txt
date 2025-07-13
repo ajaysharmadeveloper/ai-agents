@@ -49,9 +49,10 @@ openai-whisper
 torch
 torchaudio
 
+# Use faster-whisper instead of openai-whisper for Python 3.13 compatibility
+faster-whisper
+
 # FFmpeg alternatives for audio processing
-ffmpeg-python
-static-ffmpeg
 imageio-ffmpeg
 
 # Audio processing libraries

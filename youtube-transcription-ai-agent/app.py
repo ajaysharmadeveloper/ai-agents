@@ -10,7 +10,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 # Core libraries
 import yt_dlp
-import whisper
+from faster_whisper import WhisperModel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -82,6 +82,39 @@ class YouTubeTranscriptionApp:
         except Exception as e:
             logger.error(f"Error extracting video info: {e}")
             return {}
+
+    def find_ffmpeg(self):
+        """Try to find ffmpeg in various locations"""
+        import shutil
+
+        # Try imageio-ffmpeg first (most reliable)
+        try:
+            import imageio_ffmpeg
+            return imageio_ffmpeg.get_ffmpeg_exe()
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+        # Try to find ffmpeg in PATH
+        ffmpeg_path = shutil.which('ffmpeg')
+        if ffmpeg_path:
+            return ffmpeg_path
+
+        # Common paths where ffmpeg might be installed
+        common_paths = [
+            '/usr/bin/ffmpeg',
+            '/usr/local/bin/ffmpeg',
+            '/opt/conda/bin/ffmpeg',
+            '/home/appuser/venv/bin/ffmpeg',
+            '/app/.apt/usr/bin/ffmpeg',  # Streamlit Cloud path
+        ]
+
+        for path in common_paths:
+            if os.path.exists(path):
+                return path
+
+        return None
 
     def download_audio(self, url: str) -> str:
         """Download audio from YouTube video"""
@@ -203,16 +236,24 @@ class YouTubeTranscriptionApp:
         return None
 
     def transcribe_audio(self, audio_path: str) -> str:
-        """Transcribe audio using Whisper"""
+        """Transcribe audio using faster-whisper"""
         try:
             # Load model with CPU-optimized settings
-            model = whisper.load_model("base", device="cpu")
-            result = model.transcribe(
+            model = WhisperModel("base", device="cpu", compute_type="int8")
+
+            # Transcribe the audio
+            segments, info = model.transcribe(
                 audio_path,
-                fp16=False,  # Disable FP16 for CPU compatibility
-                verbose=False  # Reduce output
+                beam_size=1,  # Faster inference
+                language="en",  # Can be set to None for auto-detection
+                condition_on_previous_text=False  # Faster processing
             )
-            return result["text"]
+
+            # Combine all segments into full text
+            transcription = " ".join([segment.text for segment in segments])
+
+            return transcription.strip()
+
         except Exception as e:
             logger.error(f"Error transcribing audio: {e}")
             st.error(f"Transcription failed: {str(e)}")
