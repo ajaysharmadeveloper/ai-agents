@@ -30,6 +30,8 @@ beautifulsoup4
 requests
 lxml
 
+watchdog
+
 # HTML to text conversion
 html2text
 
