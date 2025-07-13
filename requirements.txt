@@ -40,3 +40,10 @@ sentence-transformers
 
 # HTTP utilities (enhanced requests functionality)
 urllib3
+
+# Youtube transcription
+yt-dlp
+openai-whisper
+ffmpeg-python
+torch
+torchaudio
