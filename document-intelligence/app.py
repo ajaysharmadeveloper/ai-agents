@@ -467,8 +467,8 @@ def main():
             <a href="tel:+919414256219" style="color: #1f77b4; text-decoration: none; margin: 0 1rem;">
                 📞 +91 9414256219
             </a>
-            <a href="https://nirixai.com" target="_blank" style="color: #1f77b4; text-decoration: none; margin: 0 1rem;">
-                🌐 nirixai.com
+            <a href="https://nirixai-agency.web.app/" target="_blank" style="color: #1f77b4; text-decoration: none; margin: 0 1rem;">
+                🌐 NirixAI Agency
             </a>
         </div>
         <div style="font-size: 0.9rem; color: #888;">

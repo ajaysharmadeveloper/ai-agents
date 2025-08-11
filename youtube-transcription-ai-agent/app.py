@@ -883,7 +883,7 @@ class YouTubeTranscriptionApp:
 
     def render_intelligent_video_section(self):
         """Enhanced video section with intelligent language handling"""
-        st.header("🎥 Bilingual YouTube AI Chatbot")
+        st.header("🎥 YouTube AI Chatbot")
         st.markdown("**Powered by OpenAI Whisper - Best-in-class Hindi & English transcription**")
 
         # Show GPU/CPU status
