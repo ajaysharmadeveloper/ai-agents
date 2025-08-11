@@ -48,6 +48,8 @@ openai-whisper
 # Optional but recommended for better performance
 torch
 torchaudio
+torchvision
+torchaudio
 
 # Use faster-whisper instead of openai-whisper for Python 3.13 compatibility
 faster-whisper
