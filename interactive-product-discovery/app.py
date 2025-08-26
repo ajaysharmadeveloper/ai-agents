@@ -621,14 +621,14 @@ def main():
             <h3>🚀 Transform Your E-commerce with AI</h3>
             <p>This demo showcases intelligent product discovery through natural language processing</p>
             <p><strong>Built by Nirix AI</strong> | Specializing in LangChain & E-commerce AI Solutions</p>
-            <a href="mailto:ajaysharmabki96@gmail.com" style="color: white; text-decoration: none; margin: 0 1rem;">
-                📧 ajaysharmabki96@gmail.com
+            <a href="mailto:ajay@nirixai.com" style="color: white; text-decoration: none; margin: 0 1rem;">
+                📧 ajay@nirixai.com
             </a>
             <a href="tel:+919414256219" style="color: white; text-decoration: none; margin: 0 1rem;">
                 📞 +91 9414256219
             </a>
-            <a href="https://nirixai-agency.web.app/" target="_blank" style="color: white; text-decoration: none; margin: 0 1rem;">
-                🌐 NirixAI Agency
+            <a href="https://nirixai.com/" target="_blank" style="color: white; text-decoration: none; margin: 0 1rem;">
+                🌐 NirixAI
             </a>
         </div>
         """, unsafe_allow_html=True)
